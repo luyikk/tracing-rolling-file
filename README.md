@@ -1,6 +1,6 @@
 # tracing-rolling-file
-
-![license: MIT or Apache-2.0](https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-red?style=flat-square)
+[![Latest Version](https://img.shields.io/crates/v/tracing-rolling-file-inc.svg)](https://crates.io/crates/tracing-rolling-file-inc)
+[![Rust Documentation](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/tracing-rolling-file-inc)
 ![minimum rustc: 1.42](https://img.shields.io/badge/minimum%20rustc-1.42-yellowgreen?logo=rust&style=flat-square)
 
 A rolling file appender with customizable rolling conditions,optimized the output method of file names to make them more scientific.
