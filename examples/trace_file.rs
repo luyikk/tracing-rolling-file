@@ -24,14 +24,14 @@ fn main() -> anyhow::Result<()> {
     tracing::debug!("test debug.");
 
     for i in 0..1000 {
-        test_write(i, b"data------------data-----------------data");
+        test_write(i, "data------------data-----------------data");
     }
 
     Ok(())
 }
 
 #[instrument]
-fn test_write(i: i32, data: &[u8]) -> i32 {
-    tracing::debug!("data:{data:?}");
+fn test_write(i: i32, data: &str) -> i32 {
+    tracing::debug!("data:{data}");
     i
 }
