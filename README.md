@@ -20,7 +20,3 @@ let file_appender =
         .max_size(1024)
         .daily(), 50)?;
 ```
-
-## License
-
-Dual-licensed under the terms of either the MIT license or the Apache 2.0 license.
