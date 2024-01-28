@@ -18,12 +18,12 @@ fn main() -> anyhow::Result<()> {
             .with(fmt::Layer::default().with_writer(file_writer).with_ansi(false)),
     )?;
 
-    let sp = span!(Level::DEBUG, "start");
+    let sp = span!(Level::TRACE, "start");
     let _g = sp.enter();
 
     tracing::debug!("test debug.");
 
-    for i in 0..1000 {
+    for i in 0..10 {
         test_write(i, "data------------data-----------------data");
     }
 
