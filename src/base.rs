@@ -4,7 +4,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use tracing_rolling_file::*;
+//! use tracing_rolling_file_inc::*;
 //! let c = RollingConditionBase::new().daily();
 //! let c = RollingConditionBase::new().hourly().max_size(1024 * 1024);
 //! ```
@@ -111,8 +111,8 @@ mod test {
 
     fn build_context(condition: RollingConditionBase, max_files: usize) -> Context {
         let tempdir = tempfile::tempdir().unwrap();
-        let filename = tempdir.path().join("test.log");
-        let rolling = RollingFileAppenderBase::new(filename, condition, max_files).unwrap();
+
+        let rolling = RollingFileAppenderBase::new(tempdir.as_ref(), "test", condition, max_files).unwrap();
         Context {
             _tempdir: tempdir,
             rolling,
@@ -138,10 +138,10 @@ mod test {
             .write_with_datetime(b"Line 5\n", &Local.with_ymd_and_hms(2022, 5, 31, 1, 4, 0).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(4)).exists());
-        c.verify_contains("Line 1", 3);
-        c.verify_contains("Line 2", 3);
+        c.verify_contains("Line 1", 1);
+        c.verify_contains("Line 2", 1);
         c.verify_contains("Line 3", 2);
-        c.verify_contains("Line 4", 1);
+        c.verify_contains("Line 4", 3);
         c.verify_contains("Line 5", 0);
     }
 
@@ -163,10 +163,10 @@ mod test {
         c.rolling
             .write_with_datetime(b"Line 5\n", &Local.with_ymd_and_hms(2022, 5, 31, 1, 4, 0).unwrap())
             .unwrap();
+        assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(1)).exists());
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(4)).exists());
-        assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(3)).exists());
         c.verify_contains("Line 3", 2);
-        c.verify_contains("Line 4", 1);
+        c.verify_contains("Line 4", 3);
         c.verify_contains("Line 5", 0);
     }
 
@@ -186,9 +186,9 @@ mod test {
             .write_with_datetime(b"Line 4\n", &Local.with_ymd_and_hms(2021, 3, 31, 2, 1, 0).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(3)).exists());
-        c.verify_contains("Line 1", 2);
-        c.verify_contains("Line 2", 2);
-        c.verify_contains("Line 3", 1);
+        c.verify_contains("Line 1", 1);
+        c.verify_contains("Line 2", 1);
+        c.verify_contains("Line 3", 2);
         c.verify_contains("Line 4", 0);
     }
 
@@ -214,11 +214,11 @@ mod test {
             .write_with_datetime(b"Line 6\n", &Local.with_ymd_and_hms(2022, 3, 30, 2, 3, 0).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(4)).exists());
-        c.verify_contains("Line 1", 3);
-        c.verify_contains("Line 2", 3);
-        c.verify_contains("Line 3", 3);
+        c.verify_contains("Line 1", 1);
+        c.verify_contains("Line 2", 1);
+        c.verify_contains("Line 3", 1);
         c.verify_contains("Line 4", 2);
-        c.verify_contains("Line 5", 1);
+        c.verify_contains("Line 5", 3);
         c.verify_contains("Line 6", 0);
     }
 
@@ -241,8 +241,8 @@ mod test {
             .write_with_datetime(b"ZZZ", &Local.with_ymd_and_hms(2022, 3, 31, 1, 2, 3).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(3)).exists());
-        c.verify_contains("1234567890", 2);
-        c.verify_contains("abcdefghijkl", 1);
+        c.verify_contains("1234567890", 1);
+        c.verify_contains("abcdefghijkl", 2);
         c.verify_contains("ZZZ", 0);
     }
 
@@ -269,8 +269,8 @@ mod test {
             .write_with_datetime(b"ZZZ", &Local.with_ymd_and_hms(2022, 3, 31, 1, 2, 3).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(3)).exists());
-        c.verify_contains("1234567890", 2);
-        c.verify_contains("abcdefghijkl", 1);
+        c.verify_contains("1234567890", 1);
+        c.verify_contains("abcdefghijkl", 2);
         c.verify_contains("ZZZ", 0);
     }
 
@@ -293,8 +293,8 @@ mod test {
             .write_with_datetime(b"ZZZ", &Local.with_ymd_and_hms(2021, 3, 31, 4, 4, 4).unwrap())
             .unwrap();
         assert!(!AsRef::<Path>::as_ref(&c.rolling.filename_for(3)).exists());
-        c.verify_contains("123456789", 2);
-        c.verify_contains("0abcdefghijkl", 1);
+        c.verify_contains("123456789", 1);
+        c.verify_contains("0abcdefghijkl", 2);
         c.verify_contains("ZZZ", 0);
     }
 }

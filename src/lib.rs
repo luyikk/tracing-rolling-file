@@ -14,23 +14,36 @@
 //!
 //! ```rust
 //! # fn docs() {
-//! # use tracing_rolling_file::*;
+//! # use tracing_rolling_file_inc::*;
 //! let file_appender = RollingFileAppenderBase::new(
-//!     "/var/log/myprogram",
+//!     "./logs",
+//!     "foo",
 //!     RollingConditionBase::new().daily(),
 //!     9
 //! ).unwrap();
 //! # }
 //! ```
-#![deny(warnings)]
 
 use chrono::prelude::*;
+use regex::Regex;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{
     convert::TryFrom,
     fs::{self, File, OpenOptions},
     io::{self, BufWriter, Write},
     path::Path,
 };
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum RollingFileError {
+    #[error("io error:")]
+    IOError(#[from] io::Error),
+    #[error("io error:")]
+    RegexError(#[from] regex::Error),
+}
 
 /// Determines when a file should be "rolled over".
 pub trait RollingCondition {
@@ -70,8 +83,10 @@ where
     RC: RollingCondition,
 {
     condition: RC,
-    filename: String,
-    max_filecount: usize,
+    directory: PathBuf,
+    suffix: String,
+    file_index: AtomicUsize,
+    max_file_count: usize,
     current_filesize: u64,
     writer_opt: Option<BufWriter<File>>,
 }
@@ -82,13 +97,63 @@ where
 {
     /// Creates a new rolling file appender with the given condition.
     /// The filename parent path must already exist.
-    pub fn new(filename: impl AsRef<Path>, condition: RC, max_filecount: usize) -> io::Result<RollingFileAppender<RC>> {
-        let filename = filename.as_ref().to_str().unwrap().to_string();
+    pub fn new(
+        directory: impl AsRef<Path>,
+        suffix: &str,
+        condition: RC,
+        max_file_count: usize,
+    ) -> Result<RollingFileAppender<RC>, RollingFileError> {
+        let directory = directory.as_ref().to_owned();
+
+        let (file_index, current_filesize) = {
+            if !directory.exists() {
+                fs::create_dir_all(directory.as_path())?;
+                (AtomicUsize::new(1), 0)
+            } else {
+                let dirs = fs::read_dir(directory.as_path())?;
+                let mut current_indexes = vec![];
+                let re = Regex::new(r"\d+")?;
+                for dir in dirs {
+                    let dir = dir?;
+                    if dir.file_type()?.is_file() {
+                        if let Some(filename) = dir.file_name().to_str() {
+                            if let Some(cp) = re.captures(filename) {
+                                if let Ok(index) = usize::from_str(&cp[0]) {
+                                    current_indexes.push(index);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !current_indexes.is_empty() {
+                    current_indexes.sort();
+                    current_indexes.reverse();
+
+                    let current_filesize = {
+                        let has_curr_log = directory.join(format!("{}.current.log", suffix));
+                        if has_curr_log.exists() {
+                            fs::metadata(has_curr_log)?.len()
+                        } else {
+                            0
+                        }
+                    };
+
+                    let max_index = current_indexes[0];
+                    (AtomicUsize::new(max_index + 1), current_filesize)
+                } else {
+                    (AtomicUsize::new(1), 0)
+                }
+            }
+        };
+
         let mut appender = RollingFileAppender {
             condition,
-            filename,
-            max_filecount,
-            current_filesize: 0,
+            directory,
+            suffix: suffix.to_string(),
+            file_index,
+            max_file_count,
+            current_filesize,
             writer_opt: None,
         };
         // Fail if we can't open the file initially...
@@ -97,33 +162,34 @@ where
     }
 
     /// Determines the final filename, where n==0 indicates the current file
-    fn filename_for(&self, n: usize) -> String {
-        let f = self.filename.clone();
+    fn filename_for(&self, n: usize) -> PathBuf {
+        let f = self.suffix.clone();
         if n > 0 {
-            format!("{}.{}", f, n)
+            self.directory.join(format!("{}.{}.log", f, n))
         } else {
-            f
+            self.directory.join(format!("{}.current.log", f))
         }
     }
 
     /// Rotates old files to make room for a new one.
     /// This may result in the deletion of the oldest file
     fn rotate_files(&mut self) -> io::Result<()> {
-        // ignore any failure removing the oldest file (may not exist)
-        let _ = fs::remove_file(self.filename_for(self.max_filecount.max(1)));
-        let mut r = Ok(());
-        for i in (0..self.max_filecount.max(1)).rev() {
-            let rotate_from = self.filename_for(i);
-            let rotate_to = self.filename_for(i + 1);
-            if let Err(e) = fs::rename(&rotate_from, &rotate_to).or_else(|e| match e.kind() {
-                io::ErrorKind::NotFound => Ok(()),
-                _ => Err(e),
-            }) {
-                // capture the error, but continue the loop,
-                // to maximize ability to rename everything
-                r = Err(e);
-            }
+        let remove_index = self.file_index.load(Ordering::Acquire) as i64 - self.max_file_count as i64;
+        if remove_index > 0 {
+            let _ = fs::remove_file(self.filename_for(remove_index as usize));
         }
+
+        let to_index = self.file_index.fetch_add(1, Ordering::Acquire);
+        let mut r = Ok(());
+        if let Err(e) = fs::rename(self.filename_for(0), self.filename_for(to_index)).or_else(|e| match e.kind() {
+            io::ErrorKind::NotFound => Ok(()),
+            _ => Err(e),
+        }) {
+            // capture the error, but continue the loop,
+            // to maximize ability to rename everything
+            r = Err(e);
+        }
+
         r
     }
 
@@ -169,7 +235,7 @@ where
                 // (better than missing data).
                 // This will likely used to implement logging, so
                 // avoid using log::warn and log to stderr directly
-                eprintln!("WARNING: Failed to rotate logfile {}: {}", self.filename, e);
+                eprintln!("WARNING: Failed to rotate logfile {}: {}", self.suffix, e);
             }
         }
         self.open_writer_if_needed()?;
