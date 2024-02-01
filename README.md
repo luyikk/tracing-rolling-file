@@ -16,7 +16,7 @@ as an alternative to [tracing_appender::rolling::RollingFileAppender](https://do
 ```rust
 use tracing_rolling_file_inc::*;
 let file_appender =
-    RollingFileAppenderBase::new("./logs", "foo", RollingConditionBase::new()
+    RollingFileAppenderBase::new("./logs", "log", RollingConditionBase::new()
         .max_size(1024)
         .daily(), 50)?;
 ```

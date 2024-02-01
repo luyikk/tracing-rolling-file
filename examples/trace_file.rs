@@ -4,7 +4,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 fn main() -> anyhow::Result<()> {
     let file_appender =
-        RollingFileAppenderBase::new("./logs", "foo", RollingConditionBase::new().max_size(1024).daily(), 50)?;
+        RollingFileAppenderBase::new("./logs", "log", RollingConditionBase::new().max_size(1024).daily(), 50)?;
 
     let filters = "TRACE";
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);

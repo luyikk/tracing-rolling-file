@@ -17,7 +17,7 @@
 //! # use tracing_rolling_file_inc::*;
 //! let file_appender = RollingFileAppenderBase::new(
 //!     "./logs",
-//!     "foo",
+//!     "log",
 //!     RollingConditionBase::new().daily(),
 //!     9
 //! ).unwrap();
@@ -26,6 +26,7 @@
 
 use chrono::prelude::*;
 use regex::Regex;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -84,6 +85,7 @@ where
 {
     condition: RC,
     directory: PathBuf,
+    file_name: String,
     suffix: String,
     file_index: AtomicUsize,
     max_file_count: usize,
@@ -103,8 +105,10 @@ where
         condition: RC,
         max_file_count: usize,
     ) -> Result<RollingFileAppender<RC>, RollingFileError> {
-        let directory = directory.as_ref().to_owned();
+        let arg0 = std::env::args().next().unwrap_or_else(|| "rs".to_owned());
+        let file_name = Path::new(&arg0).file_stem().map(OsStr::to_string_lossy).unwrap(/*cannot fail*/).to_string();
 
+        let directory = directory.as_ref().to_owned();
         let (file_index, current_filesize) = {
             if !directory.exists() {
                 fs::create_dir_all(directory.as_path())?;
@@ -150,6 +154,7 @@ where
         let mut appender = RollingFileAppender {
             condition,
             directory,
+            file_name,
             suffix: suffix.to_string(),
             file_index,
             max_file_count,
@@ -163,11 +168,12 @@ where
 
     /// Determines the final filename, where n==0 indicates the current file
     fn filename_for(&self, n: usize) -> PathBuf {
-        let f = self.suffix.clone();
+        let f = self.file_name.as_str();
+        let s = self.suffix.as_str();
         if n > 0 {
-            self.directory.join(format!("{}.{}.log", f, n))
+            self.directory.join(format!("{}.{}.{}", f, n, s))
         } else {
-            self.directory.join(format!("{}.current.log", f))
+            self.directory.join(format!("{}.current.{}", f, s))
         }
     }
 
@@ -235,7 +241,7 @@ where
                 // (better than missing data).
                 // This will likely used to implement logging, so
                 // avoid using log::warn and log to stderr directly
-                eprintln!("WARNING: Failed to rotate logfile {}: {}", self.suffix, e);
+                eprintln!("WARNING: Failed to rotate logfile {}: {}", self.file_name, e);
             }
         }
         self.open_writer_if_needed()?;
